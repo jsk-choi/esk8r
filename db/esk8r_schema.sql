@@ -136,12 +136,16 @@ CREATE TABLE dbo.BuildDetail (
 		DEFAULT GETDATE()
 
 	, BuildHeaderId INT NOT NULL
+	, ItemId INT NOT NULL
 
 	, CONSTRAINT PK_BuildDetail 
 		PRIMARY KEY (Id)
 	, CONSTRAINT FK_BuildDetail_BuildHeader
 		FOREIGN KEY (BuildHeaderId) 
 		REFERENCES BuildHeader(Id)
+	, CONSTRAINT FK_BuildDetail_Item
+		FOREIGN KEY (ItemId) 
+		REFERENCES Item(Id)
 )
 GO
 
