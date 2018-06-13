@@ -6,7 +6,7 @@ IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Category')		DROP TABLE dbo.Cate
 GO
 
 ------------------------
---- ITEM
+--- CATEGORY
 CREATE TABLE dbo.Category (
 	Id INT IDENTITY(1,1)
 
@@ -123,4 +123,31 @@ CREATE NONCLUSTERED INDEX IX_BuildHeader ON dbo.BuildHeader (
 	UniqueId
 )
 GO
+
+------------------------
+--- BUILD DETAIL
+CREATE TABLE dbo.BuildDetail (
+	
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+	, BuildHeaderId INT NOT NULL
+
+	, CONSTRAINT PK_BuildDetail 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_BuildDetail_BuildHeader
+		FOREIGN KEY (BuildHeaderId) 
+		REFERENCES BuildHeader(Id)
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_BuildDetail ON dbo.BuildDetail (
+	BuildHeaderId
+)
+GO
+
 
