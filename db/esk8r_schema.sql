@@ -1,3 +1,4 @@
+IF EXISTS(SELECT * FROM sys.tables WHERE NAME = '_ChangeLog')	DROP TABLE dbo._ChangeLog
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Asset')		DROP TABLE dbo.Asset
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildDetail')	DROP TABLE dbo.BuildDetail
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildHeader')	DROP TABLE dbo.BuildHeader
@@ -6,6 +7,47 @@ IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'ConfigHeader')	DROP TABLE dbo.C
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Item')			DROP TABLE dbo.Item
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Brand')		DROP TABLE dbo.Brand
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Category')		DROP TABLE dbo.Category
+GO
+
+-- EXTEND IDENTITY MODELS (TABLES)
+-- ASP.NET Identity MUST HAVE CREATED ITS TABLES FIRST
+-- REGISTER NEW USER WITH UI
+IF EXISTS(SELECT * FROM sys.tables WHERE name = '_Users')
+BEGIN
+
+	IF NOT EXISTS(
+		SELECT * 
+		FROM sys.columns 
+		WHERE name = 'IdNum' 
+			AND OBJECT_NAME(object_id) = '_Users')
+	BEGIN
+		ALTER TABLE dbo._Users ADD IdNum INT IDENTITY(1,1)
+	END
+
+	IF NOT EXISTS(
+		SELECT * FROM SYS.indexes WHERE name = 'UQ_IdNum')
+	BEGIN
+		CREATE UNIQUE INDEX UQ_IdNum ON dbo._Users (IdNum)
+	END
+
+END
+
+------------------------
+--- CHANGELOG
+CREATE TABLE dbo._ChangeLog (
+	
+	Id INT IDENTITY(1,1)
+
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+	, SourceTable VARCHAR(100) NOT NULL
+	, SourceRecordId INT NOT NULL
+	, SourceRecord XML NOT NULL
+
+	, CONSTRAINT PK_ChangeLog 
+		PRIMARY KEY (Id)
+)
 GO
 
 ------------------------
@@ -20,12 +62,16 @@ CREATE TABLE dbo.Category (
 
 	, ParentId INT NULL
 	, Category NVARCHAR(100) NOT NULL
+	, UserId INT NOT NULL
 
 	, CONSTRAINT PK_Category 
 		PRIMARY KEY (Id)
 	, CONSTRAINT FK_Category_CategoryParent 
 		FOREIGN KEY (ParentId) 
 		REFERENCES Category(Id)
+	, CONSTRAINT FK_Category_User
+		FOREIGN KEY (UserId) 
+		REFERENCES _Users(IdNum)
 )
 GO
 
@@ -33,6 +79,26 @@ CREATE NONCLUSTERED INDEX IX_Category ON dbo.Category (
 	ParentId
 )
 GO
+
+CREATE TRIGGER tgCategoryUpdate ON dbo.Category AFTER UPDATE
+AS
+
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Category', @id, @xml);
+GO
+
+
 
 ------------------------
 --- ITEM
@@ -44,6 +110,9 @@ CREATE TABLE dbo.Brand (
 		DEFAULT 1
 	, CreateDate DATETIME NOT NULL 
 		DEFAULT GETDATE()
+	
+	, OwnerUserId INT NULL
+	, CreatedByUserId INT NOT NULL
 
  	, UniqueId NVARCHAR(100) NOT NULL
 	, BrandName NVARCHAR(100) NOT NULL
@@ -53,14 +122,38 @@ CREATE TABLE dbo.Brand (
 
 	, CONSTRAINT PK_Brand 
 		PRIMARY KEY (Id)
-)
+	, CONSTRAINT FK_Brand_OwnerUser 
+		FOREIGN KEY (OwnerUserId) 
+		REFERENCES dbo._Users(IdNum)
+	, CONSTRAINT FK_Brand_CreatedByUser 
+		FOREIGN KEY (CreatedByUserId) 
+		REFERENCES dbo._Users(IdNum))
 GO
 
 CREATE NONCLUSTERED INDEX IX_Brand ON dbo.Brand (
 	UniqueId
+	, OwnerUserId
+	, CreatedByUserId
 )
 GO
 
+CREATE TRIGGER tgBrandUpdate ON dbo.Brand AFTER UPDATE
+AS
+
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Brand', @id, @xml);
+GO
 
 ------------------------
 --- ITEM
@@ -105,6 +198,24 @@ CREATE NONCLUSTERED INDEX IX_Item ON dbo.Item (
 )
 GO
 
+CREATE TRIGGER tgItemUpdate ON dbo.Item AFTER UPDATE
+AS
+
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Item', @id, @xml);
+GO
+
 ------------------------
 --- ASSET
 CREATE TABLE dbo.Asset (
@@ -143,6 +254,7 @@ CREATE TABLE dbo.BuildHeader (
 	, CreateDate DATETIME NOT NULL 
 		DEFAULT GETDATE()
 
+	, UserId INT NOT NULL
 	, UniqueId NVARCHAR(100) NOT NULL
 	, BuildName NVARCHAR(100) NOT NULL
 	, Notes NVARCHAR(500) NULL
@@ -151,12 +263,32 @@ CREATE TABLE dbo.BuildHeader (
 
 	, CONSTRAINT PK_BuildHeader 
 		PRIMARY KEY (Id)
+	, CONSTRAINT FK_BuildHeader_User 
+		FOREIGN KEY (UserId) 
+		REFERENCES dbo._Users(IdNum)
 )
 GO
 
 CREATE NONCLUSTERED INDEX IX_BuildHeader ON dbo.BuildHeader (
 	UniqueId
 )
+GO
+
+CREATE TRIGGER tgBuildHeaderUpdate ON dbo.BuildHeader AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('BuildHeader', @id, @xml);
 GO
 
 ------------------------
@@ -192,6 +324,23 @@ CREATE NONCLUSTERED INDEX IX_BuildDetail ON dbo.BuildDetail (
 )
 GO
 
+CREATE TRIGGER tgBuildDetailUpdate ON dbo.BuildDetail AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('BuildDetail', @id, @xml);
+GO
+
 ------------------------
 --- CONFIG HEADER
 CREATE TABLE dbo.ConfigHeader (
@@ -202,18 +351,40 @@ CREATE TABLE dbo.ConfigHeader (
 		DEFAULT 1
 	, CreateDate DATETIME NOT NULL 
 		DEFAULT GETDATE()
-
+	
+	, UserId INT NOT NULL
 	, UniqueId NVARCHAR(100) NOT NULL
 	, ConfigName NVARCHAR(100) NOT NULL
 	, Notes NVARCHAR(500) NULL
 
 	, CONSTRAINT PK_ConfigHeader 
 		PRIMARY KEY (Id)
+	, CONSTRAINT FK_ConfigHeader_User 
+		FOREIGN KEY (UserId) 
+		REFERENCES dbo._Users(IdNum)
+
 )
 GO
 
 --CREATE NONCLUSTERED INDEX IX_ConfigHeader ON dbo.ConfigHeader ()
 --GO
+
+CREATE TRIGGER tgConfigHeaderUpdate ON dbo.ConfigHeader AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigHeader', @id, @xml);
+GO
 
 ------------------------
 --- CONFIG DETAIL
@@ -246,3 +417,21 @@ CREATE NONCLUSTERED INDEX IX_ConfigDetail ON dbo.ConfigDetail (
 	CategoryId
 )
 GO
+
+CREATE TRIGGER tgConfigDetailUpdate ON dbo.ConfigDetail AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigDetail', @id, @xml);
+GO
+
