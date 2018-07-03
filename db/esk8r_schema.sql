@@ -2,11 +2,14 @@ IF EXISTS(SELECT * FROM sys.tables WHERE NAME = '_ChangeLog')	DROP TABLE dbo._Ch
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Asset')		DROP TABLE dbo.Asset
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildDetail')	DROP TABLE dbo.BuildDetail
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildHeader')	DROP TABLE dbo.BuildHeader
+IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Item')			DROP TABLE dbo.Item
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'ConfigDetail')	DROP TABLE dbo.ConfigDetail
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'ConfigHeader')	DROP TABLE dbo.ConfigHeader
-IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Item')			DROP TABLE dbo.Item
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Brand')		DROP TABLE dbo.Brand
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Category')		DROP TABLE dbo.Category
+
+IF EXISTS(SELECT * FROM sys.views WHERE NAME = 'vConfig')		DROP VIEW dbo.vConfig
+IF EXISTS(SELECT * FROM sys.views WHERE NAME = 'vItems')		DROP VIEW dbo.vItems
 GO
 
 -- EXTEND IDENTITY MODELS (TABLES)
@@ -98,8 +101,6 @@ AS
 	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Category', @id, @xml);
 GO
 
-
-
 ------------------------
 --- ITEM
 CREATE TABLE dbo.Brand (
@@ -127,7 +128,8 @@ CREATE TABLE dbo.Brand (
 		REFERENCES dbo._Users(IdNum)
 	, CONSTRAINT FK_Brand_CreatedByUser 
 		FOREIGN KEY (CreatedByUserId) 
-		REFERENCES dbo._Users(IdNum))
+		REFERENCES dbo._Users(IdNum)
+)
 GO
 
 CREATE NONCLUSTERED INDEX IX_Brand ON dbo.Brand (
@@ -152,68 +154,8 @@ AS
 		FOR XML AUTO
 	)
 
-	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Brand', @id, @xml);
-GO
-
-------------------------
---- ITEM
-CREATE TABLE dbo.Item (
-
-	Id INT IDENTITY(1,1)
-
-	, Active BIT NOT NULL 
-		DEFAULT 1
-	, CreateDate DATETIME NOT NULL 
-		DEFAULT GETDATE()
-
- 	, UniqueId NVARCHAR(100) NOT NULL
-	, ParentId INT NULL
-	, CategoryId INT NULL
-
-	, BrandId INT NOT NULL
-	, ItemName NVARCHAR(100) NOT NULL
-	, ItemDesc NVARCHAR(2000) NOT NULL
-	
-	, [Url] NVARCHAR(200) NOT NULL
-	, Price MONEY NOT NULL
-
-	, CONSTRAINT PK_Item 
-		PRIMARY KEY (Id)
-	, CONSTRAINT FK_Item_ItemParent 
-		FOREIGN KEY (ParentId) 
-		REFERENCES Item(Id)
-	, CONSTRAINT FK_Item_Brand 
-		FOREIGN KEY (BrandId) 
-		REFERENCES Brand(Id)
-	, CONSTRAINT FK_Item_Category 
-		FOREIGN KEY (CategoryId) 
-		REFERENCES Category(Id)
-)
-GO
-
-CREATE NONCLUSTERED INDEX IX_Item ON dbo.Item (
-	UniqueId
-	, ParentId
-	, BrandId
-)
-GO
-
-CREATE TRIGGER tgItemUpdate ON dbo.Item AFTER UPDATE
-AS
-
-	DECLARE @id INT
-	DECLARE @xml XML
-
-	SELECT @id = id 
-	FROM deleted
-
-	SELECT @xml = (
-		SELECT * 
-		FROM deleted
-		FOR XML AUTO
-	)
-
-	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Item', @id, @xml);
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) 
+	VALUES ('Brand', @id, @xml);
 GO
 
 ------------------------
@@ -242,6 +184,170 @@ CREATE NONCLUSTERED INDEX IX_Asset ON dbo.Asset (
 	ItemId
 )
 GO
+
+------------------------
+--- CONFIG HEADER
+CREATE TABLE dbo.ConfigHeader (
+	
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+	
+	, UserId INT NOT NULL
+	, UniqueId NVARCHAR(100) NOT NULL
+	, ConfigName NVARCHAR(100) NOT NULL
+	, Notes NVARCHAR(500) NULL
+	, ConfigType NVARCHAR(50) NOT NULL
+
+	, CONSTRAINT PK_ConfigHeader 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_ConfigHeader_User 
+		FOREIGN KEY (UserId) 
+		REFERENCES dbo._Users(IdNum)
+
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_ConfigHeader ON dbo.ConfigHeader (
+	UserId
+)
+GO
+
+CREATE TRIGGER tgConfigHeaderUpdate ON dbo.ConfigHeader AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigHeader', @id, @xml);
+GO
+
+------------------------
+--- CONFIG DETAIL
+CREATE TABLE dbo.ConfigDetail (
+	
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+	, ConfigHeaderId INT NOT NULL
+	, CategoryId INT NULL
+	, Quantity SMALLINT NOT NULL DEFAULT 1
+	, Notes NVARCHAR(100) NULL
+	, IsRequired BIT NOT NULL
+
+	, CONSTRAINT PK_ConfigDetail 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_ConfigDetail_ConfigHeader
+		FOREIGN KEY (ConfigHeaderId) 
+		REFERENCES ConfigHeader(Id)
+	, CONSTRAINT FK_ConfigDetail_Category
+		FOREIGN KEY (CategoryId) 
+		REFERENCES Category(Id)
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_ConfigDetail ON dbo.ConfigDetail (
+	ConfigHeaderId,
+	CategoryId
+)
+GO
+
+CREATE TRIGGER tgConfigDetailUpdate ON dbo.ConfigDetail AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigDetail', @id, @xml);
+GO
+
+------------------------
+--- ITEM
+CREATE TABLE dbo.Item (
+
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+ 	, UniqueId NVARCHAR(100) NOT NULL
+	, ParentId INT NULL
+	, CategoryId INT NULL
+	, ConfigHeaderId INT NULL
+
+	, BrandId INT NULL
+	, ItemName NVARCHAR(100) NOT NULL
+	, ItemDesc NVARCHAR(2000) NULL
+	
+	, [Url] NVARCHAR(200) NULL
+	, Price MONEY NOT NULL
+
+	, CONSTRAINT PK_Item 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_Item_ItemParent 
+		FOREIGN KEY (ParentId) 
+		REFERENCES Item(Id)
+	, CONSTRAINT FK_Item_Brand 
+		FOREIGN KEY (BrandId) 
+		REFERENCES Brand(Id)
+	, CONSTRAINT FK_Item_Category 
+		FOREIGN KEY (CategoryId) 
+		REFERENCES Category(Id)
+	, CONSTRAINT FK_Item_ConfigHeader 
+		FOREIGN KEY (ConfigHeaderId) 
+		REFERENCES ConfigHeader(Id)
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_Item ON dbo.Item (
+	UniqueId
+	, ParentId
+	, BrandId
+)
+GO
+
+CREATE TRIGGER tgItemUpdate ON dbo.Item AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Item', @id, @xml);
+GO
+
 
 ------------------------
 --- BUILD HEADER
@@ -303,8 +409,14 @@ CREATE TABLE dbo.BuildDetail (
 		DEFAULT GETDATE()
 
 	, BuildHeaderId INT NOT NULL
+	
 	, ItemId INT NULL
 	, ConfigHeaderId INT NULL
+
+	, ItemName NVARCHAR(100) NULL
+	, ItemDescription NVARCHAR(500) NULL
+
+	, Url NVARCHAR(200) NULL
 
 	, CONSTRAINT PK_BuildDetail 
 		PRIMARY KEY (Id)
@@ -341,97 +453,49 @@ AS
 	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('BuildDetail', @id, @xml);
 GO
 
-------------------------
---- CONFIG HEADER
-CREATE TABLE dbo.ConfigHeader (
-	
-	Id INT IDENTITY(1,1)
+CREATE VIEW vConfig AS 
+select ch.Id ConfigId
+	, ch.UniqueId ConfigUniqueId
 
-	, Active BIT NOT NULL 
-		DEFAULT 1
-	, CreateDate DATETIME NOT NULL 
-		DEFAULT GETDATE()
-	
-	, UserId INT NOT NULL
-	, UniqueId NVARCHAR(100) NOT NULL
-	, ConfigName NVARCHAR(100) NOT NULL
-	, Notes NVARCHAR(500) NULL
+	, ch.ConfigName
+	, ch.ConfigType
+	, cd.Id ConfigDetailId
+	, cd.IsRequired
+	, cat.CatGroupId
+	, cat.CatGroup
+	, cat.Id CategoryId
+	, cat.Category
+from ConfigHeader ch
+	join ConfigDetail cd
+		on cd.ConfigHeaderId = ch.Id	
+	join (
+		select 
+			parent.Id CatGroupId,
+			parent.Category CatGroup,
+			child.Id,
+			child.Category
+		from Category child
+			join Category parent
+				on child.ParentId = parent.Id	
+	) cat
+		on cd.CategoryId = cat.Id
+go
 
-	, CONSTRAINT PK_ConfigHeader 
-		PRIMARY KEY (Id)
-	, CONSTRAINT FK_ConfigHeader_User 
-		FOREIGN KEY (UserId) 
-		REFERENCES dbo._Users(IdNum)
+CREATE VIEW vItems AS 
+select 
+	i.Id ItemId,
+	b.Id BrandId,
+	b.BrandName,
+	c.Id CategorId,
+	c.Category,
 
-)
-GO
-
---CREATE NONCLUSTERED INDEX IX_ConfigHeader ON dbo.ConfigHeader ()
---GO
-
-CREATE TRIGGER tgConfigHeaderUpdate ON dbo.ConfigHeader AFTER UPDATE
-AS
-	DECLARE @id INT
-	DECLARE @xml XML
-
-	SELECT @id = id 
-	FROM deleted
-
-	SELECT @xml = (
-		SELECT * 
-		FROM deleted
-		FOR XML AUTO
-	)
-
-	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigHeader', @id, @xml);
-GO
-
-------------------------
---- CONFIG DETAIL
-CREATE TABLE dbo.ConfigDetail (
-	
-	Id INT IDENTITY(1,1)
-
-	, Active BIT NOT NULL 
-		DEFAULT 1
-	, CreateDate DATETIME NOT NULL 
-		DEFAULT GETDATE()
-
-	, ConfigHeaderId INT NOT NULL
-	, CategoryId INT NULL
-	, Notes NVARCHAR(100) NULL
-
-	, CONSTRAINT PK_ConfigDetail 
-		PRIMARY KEY (Id)
-	, CONSTRAINT FK_ConfigDetail_ConfigHeader
-		FOREIGN KEY (ConfigHeaderId) 
-		REFERENCES ConfigHeader(Id)
-	, CONSTRAINT FK_ConfigDetail_Category
-		FOREIGN KEY (CategoryId) 
-		REFERENCES Category(Id)
-)
-GO
-
-CREATE NONCLUSTERED INDEX IX_ConfigDetail ON dbo.ConfigDetail (
-	ConfigHeaderId,
-	CategoryId
-)
-GO
-
-CREATE TRIGGER tgConfigDetailUpdate ON dbo.ConfigDetail AFTER UPDATE
-AS
-	DECLARE @id INT
-	DECLARE @xml XML
-
-	SELECT @id = id 
-	FROM deleted
-
-	SELECT @xml = (
-		SELECT * 
-		FROM deleted
-		FOR XML AUTO
-	)
-
-	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('ConfigDetail', @id, @xml);
-GO
-
+	i.ItemName,
+	i.ItemDesc,
+	i.Url,
+	i.Price
+from dbo.Item i
+	join dbo.Category c
+		on i.CategoryId = c.Id
+	join dbo.Brand b
+		on i.BrandId = b.Id
+go
