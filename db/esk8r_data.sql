@@ -32,9 +32,6 @@ INSERT INTO dbo.Brand (OwnerUserId, CreatedByUserId, UniqueId, BrandName, Url) V
 (null, 1, 'torqueboards',  'Torque Boards', 'diyelectricskateboard.com'),
 (null, 1, 'enertion',  'Enertion', 'enertion.com');
 
-select * from dbo.Brand
-select * from dbo.Category
-
 INSERT INTO dbo.Item (UniqueId, ParentId, CategoryId, BrandId, ItemName, ItemDesc, Url, Price) VALUES 
 ('bms-d140-10s', null, 22, 3, 'BesTech HCX-D140 BMS - 10s', '', '', 30),
 ('bms-d140-12s', null, 22, 3, 'BesTech HCX-D140 BMS - 12s', '', '', 31),
@@ -61,6 +58,15 @@ INSERT INTO dbo.ConfigDetail(ConfigHeaderId, CategoryId, IsRequired) VALUES
 (3,6,1), (3,7,1), (3,7,1), (3,8,1),
 (3,8,1), (3,9,1), (3,9,1), (3,18,1),
 (3,18,1), (2,21,1);
+
+INSERT INTO dbo.CompatHeader(UserId, UniqueId, CompatName) VALUES 
+(1, 'caliber-ii-trucks', 'Caliber ii Trucks'),
+(1, 'tb-218mm-trucks', 'TorqueBoards 218mm Trucks');
+
+INSERT INTO dbo.CompatDetail(CompatHeaderId, ItemId) VALUES 
+(1, 6), (1, 7), (1, 8), (2, 6), (2, 5);
+
+
 
 --select * from ConfigHeader
 

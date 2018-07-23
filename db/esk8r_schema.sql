@@ -2,12 +2,17 @@ IF EXISTS(SELECT * FROM sys.tables WHERE NAME = '_ChangeLog')	DROP TABLE dbo._Ch
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Asset')		DROP TABLE dbo.Asset
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildDetail')	DROP TABLE dbo.BuildDetail
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'BuildHeader')	DROP TABLE dbo.BuildHeader
+
+IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'CompatDetail')	DROP TABLE dbo.CompatDetail
+IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'CompatHeader')	DROP TABLE dbo.CompatHeader
+
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Item')			DROP TABLE dbo.Item
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'ConfigDetail')	DROP TABLE dbo.ConfigDetail
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'ConfigHeader')	DROP TABLE dbo.ConfigHeader
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Brand')		DROP TABLE dbo.Brand
 IF EXISTS(SELECT * FROM sys.tables WHERE NAME = 'Category')		DROP TABLE dbo.Category
 
+IF EXISTS(SELECT * FROM sys.views WHERE NAME = 'vCompat')		DROP VIEW dbo.vCompat
 IF EXISTS(SELECT * FROM sys.views WHERE NAME = 'vConfig')		DROP VIEW dbo.vConfig
 IF EXISTS(SELECT * FROM sys.views WHERE NAME = 'vItems')		DROP VIEW dbo.vItems
 GO
@@ -453,6 +458,106 @@ AS
 	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('BuildDetail', @id, @xml);
 GO
 
+------------------------
+--- COMPATIBILITY HEADER
+CREATE TABLE dbo.CompatHeader (
+	
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+	, UserId INT NOT NULL
+	, UniqueId NVARCHAR(100) NOT NULL
+	, CompatName NVARCHAR(100) NOT NULL
+	, Notes NVARCHAR(500) NULL
+
+	, CONSTRAINT PK_CompatHeader 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_CompatHeader_User 
+		FOREIGN KEY (UserId) 
+		REFERENCES dbo._Users(IdNum)
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_CompatHeader ON dbo.CompatHeader (
+	UserId,
+	UniqueId
+)
+GO
+
+CREATE TRIGGER tgCompatHeaderUpdate ON dbo.CompatHeader AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('CompatHeader', @id, @xml);
+
+GO
+
+------------------------
+--- COMPATIBILITY DETAIL
+CREATE TABLE dbo.CompatDetail (
+	
+	Id INT IDENTITY(1,1)
+
+	, Active BIT NOT NULL 
+		DEFAULT 1
+	, CreateDate DATETIME NOT NULL 
+		DEFAULT GETDATE()
+
+	, CompatHeaderId INT NOT NULL
+	, ItemId INT NOT NULL
+
+	, ItemName NVARCHAR(100) NULL
+	, ItemDescription NVARCHAR(500) NULL
+
+	, Url NVARCHAR(200) NULL
+
+	, CONSTRAINT PK_CompatDetail 
+		PRIMARY KEY (Id)
+	, CONSTRAINT FK_CompatDetail_CompatHeader
+		FOREIGN KEY (CompatHeaderId) 
+		REFERENCES CompatHeader(Id)
+	, CONSTRAINT FK_CompatDetail_Item
+		FOREIGN KEY (ItemId) 
+		REFERENCES Item(Id)
+)
+GO
+
+CREATE NONCLUSTERED INDEX IX_CompatDetail ON dbo.CompatDetail (
+	CompatHeaderId
+	, ItemId
+)
+GO
+
+CREATE TRIGGER tgCompatDetailUpdate ON dbo.CompatDetail AFTER UPDATE
+AS
+	DECLARE @id INT
+	DECLARE @xml XML
+
+	SELECT @id = id 
+	FROM deleted
+
+	SELECT @xml = (
+		SELECT * 
+		FROM deleted
+		FOR XML AUTO
+	)
+
+	INSERT INTO dbo._ChangeLog (SourceTable, SourceRecordId, SourceRecord) VALUES ('Compat', @id, @xml);
+GO
+
 CREATE VIEW vConfig AS 
 select ch.Id ConfigId
 	, ch.UniqueId ConfigUniqueId
@@ -498,4 +603,27 @@ from dbo.Item i
 		on i.CategoryId = c.Id
 	join dbo.Brand b
 		on i.BrandId = b.Id
+go
+
+CREATE VIEW dbo.vCompat
+as
+select 
+	ch.Id CompatHeaderId
+	, ch.CompatName
+	, ch.UniqueId
+	, ch.UserId
+	, i.ItemId
+	, i.BrandId
+	, i.BrandName
+	, i.CategorId
+	, i.Category
+	, i.ItemName
+	, i.ItemDesc
+	, i.Url
+	, i.Price
+from CompatHeader ch
+	join CompatDetail cd
+		on cd.CompatHeaderId = ch.Id
+	join vItems i
+		on cd.ItemId = i.ItemId
 go
